@@ -1,0 +1,87 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=US-ASCII">
+<title>Production of initiating function return value</title>
+<link rel="stylesheet" href="../../../boostbook.css" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.79.1">
+<link rel="home" href="../../../index.html" title="Asio">
+<link rel="up" href="../asynchronous_operations.html" title="Requirements on asynchronous operations">
+<link rel="prev" href="automatic_deduction_of_initiating_function_return_type.html" title="Automatic deduction of initiating function return type">
+<link rel="next" href="lifetime_of_initiating_function_arguments.html" title="Lifetime of initiating function arguments">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<table cellpadding="2" width="100%"><tr><td valign="top"><img alt="asio C++ library" width="250" height="60" src="../../../asio.png"></td></tr></table>
+<hr>
+<div class="spirit-nav">
+<a accesskey="p" href="automatic_deduction_of_initiating_function_return_type.html"><img src="../../../prev.png" alt="Prev"></a><a accesskey="u" href="../asynchronous_operations.html"><img src="../../../up.png" alt="Up"></a><a accesskey="h" href="../../../index.html"><img src="../../../home.png" alt="Home"></a><a accesskey="n" href="lifetime_of_initiating_function_arguments.html"><img src="../../../next.png" alt="Next"></a>
+</div>
+<div class="section">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="asio.reference.asynchronous_operations.production_of_initiating_function_return_value"></a><a class="link" href="production_of_initiating_function_return_value.html" title="Production of initiating function return value">Production
+        of initiating function return value</a>
+</h4></div></div></div>
+<p>
+          An initiating function produces its return type as follows:
+        </p>
+<p>
+          &#8212; constructing an object <code class="computeroutput"><span class="identifier">result</span></code>
+          of type <code class="computeroutput"><span class="identifier">async_result</span><span class="special">&lt;</span><span class="identifier">decay_t</span><span class="special">&lt;</span><span class="identifier">CompletionToken</span><span class="special">&gt;,</span>
+          <span class="identifier">Signature</span><span class="special">&gt;</span></code>,
+          initialized as <code class="computeroutput"><span class="identifier">result</span><span class="special">(</span><span class="identifier">completion_handler</span><span class="special">)</span></code>;
+          and
+        </p>
+<p>
+          &#8212; using <code class="computeroutput"><span class="identifier">result</span><span class="special">.</span><span class="identifier">get</span><span class="special">()</span></code>
+          as the operand of the return statement.
+        </p>
+<p>
+          [<span class="emphasis"><em>Example:</em></span> Given an asynchronous operation with <span class="emphasis"><em>Completion
+          signature</em></span> <code class="computeroutput"><span class="keyword">void</span><span class="special">(</span><span class="identifier">R1</span> <span class="identifier">r1</span><span class="special">,</span> <span class="identifier">R2</span> <span class="identifier">r2</span><span class="special">)</span></code>, an initiating function meeting these
+          requirements may be implemented as follows:
+        </p>
+<pre class="programlisting"><span class="keyword">template</span><span class="special">&lt;</span><span class="keyword">class</span> <span class="identifier">CompletionToken</span><span class="special">&gt;</span>
+<span class="keyword">auto</span> <span class="identifier">async_xyz</span><span class="special">(</span><span class="identifier">T1</span> <span class="identifier">t1</span><span class="special">,</span> <span class="identifier">T2</span> <span class="identifier">t2</span><span class="special">,</span> <span class="identifier">CompletionToken</span><span class="special">&amp;&amp;</span> <span class="identifier">token</span><span class="special">)</span>
+<span class="special">{</span>
+  <span class="keyword">typename</span> <span class="identifier">async_result</span><span class="special">&lt;</span><span class="identifier">decay_t</span><span class="special">&lt;</span><span class="identifier">CompletionToken</span><span class="special">&gt;,</span> <span class="keyword">void</span><span class="special">(</span><span class="identifier">R1</span><span class="special">,</span> <span class="identifier">R2</span><span class="special">)&gt;::</span><span class="identifier">completion_handler_type</span>
+    <span class="identifier">completion_handler</span><span class="special">(</span><span class="identifier">forward</span><span class="special">&lt;</span><span class="identifier">CompletionToken</span><span class="special">&gt;(</span><span class="identifier">token</span><span class="special">));</span>
+
+  <span class="identifier">async_result</span><span class="special">&lt;</span><span class="identifier">decay_t</span><span class="special">&lt;</span><span class="identifier">CompletionToken</span><span class="special">&gt;,</span> <span class="keyword">void</span><span class="special">(</span><span class="identifier">R1</span><span class="special">,</span> <span class="identifier">R2</span><span class="special">)&gt;</span> <span class="identifier">result</span><span class="special">(</span><span class="identifier">completion_handler</span><span class="special">);</span>
+
+  <span class="comment">// initiate the operation and cause completion_handler to be invoked with</span>
+  <span class="comment">// the result</span>
+
+  <span class="keyword">return</span> <span class="identifier">result</span><span class="special">.</span><span class="identifier">get</span><span class="special">();</span>
+<span class="special">}</span>
+</pre>
+<p>
+          For convenience, initiating functions may be implemented using the <code class="computeroutput"><span class="identifier">async_completion</span></code> template:
+        </p>
+<pre class="programlisting"><span class="keyword">template</span><span class="special">&lt;</span><span class="keyword">class</span> <span class="identifier">CompletionToken</span><span class="special">&gt;</span>
+<span class="keyword">auto</span> <span class="identifier">async_xyz</span><span class="special">(</span><span class="identifier">T1</span> <span class="identifier">t1</span><span class="special">,</span> <span class="identifier">T2</span> <span class="identifier">t2</span><span class="special">,</span> <span class="identifier">CompletionToken</span><span class="special">&amp;&amp;</span> <span class="identifier">token</span><span class="special">)</span>
+<span class="special">{</span>
+  <span class="identifier">async_completion</span><span class="special">&lt;</span><span class="identifier">CompletionToken</span><span class="special">,</span> <span class="keyword">void</span><span class="special">(</span><span class="identifier">R1</span><span class="special">,</span> <span class="identifier">R2</span><span class="special">)&gt;</span> <span class="identifier">init</span><span class="special">(</span><span class="identifier">token</span><span class="special">);</span>
+
+  <span class="comment">// initiate the operation and cause init.completion_handler to be invoked</span>
+  <span class="comment">// with the result</span>
+
+  <span class="keyword">return</span> <span class="identifier">init</span><span class="special">.</span><span class="identifier">result</span><span class="special">.</span><span class="identifier">get</span><span class="special">();</span>
+<span class="special">}</span>
+</pre>
+<p>
+          &#8212;<span class="emphasis"><em>end example</em></span>]
+        </p>
+</div>
+<table xmlns:rev="http://www.cs.rpi.edu/~gregod/boost/tools/doc/revision" width="100%"><tr>
+<td align="left"></td>
+<td align="right"><div class="copyright-footer">Copyright &#169; 2003-2017 Christopher M. Kohlhoff<p>
+        Distributed under the Boost Software License, Version 1.0. (See accompanying
+        file LICENSE_1_0.txt or copy at <a href="http://www.boost.org/LICENSE_1_0.txt" target="_top">http://www.boost.org/LICENSE_1_0.txt</a>)
+      </p>
+</div></td>
+</tr></table>
+<hr>
+<div class="spirit-nav">
+<a accesskey="p" href="automatic_deduction_of_initiating_function_return_type.html"><img src="../../../prev.png" alt="Prev"></a><a accesskey="u" href="../asynchronous_operations.html"><img src="../../../up.png" alt="Up"></a><a accesskey="h" href="../../../index.html"><img src="../../../home.png" alt="Home"></a><a accesskey="n" href="lifetime_of_initiating_function_arguments.html"><img src="../../../next.png" alt="Next"></a>
+</div>
+</body>
+</html>

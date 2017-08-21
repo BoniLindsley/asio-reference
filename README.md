@@ -8,13 +8,6 @@ While Asio is preparing for inclusion into the C++ standard,
 The [project site][Asio-reference] for this repo
   contains a more up-to-date version of the documentation.
 
-Note that the generated reference is the default output from Doxygen.
-So the documentation layout vastly differs from that of Boost.
-However, the content should be the same.
-
-Note also that this only builds the reference.
-
-
 ### Usage
 
 ```sh

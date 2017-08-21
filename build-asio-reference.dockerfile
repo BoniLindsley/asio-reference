@@ -43,19 +43,26 @@ FROM debian:buster-slim
 ENV DEBIAN_FRONTEND=noninteractive
 # Update the package list.
 RUN apt-get update
-# The actual installation. Package list:
+# The following packages are required.
 #
 #   * ca-certificates - for cloning Asio Git repository via https.
-#   * doxygen - Documentation is built using Doxygen.
+#   * docbook-xml - Provides DocBook DTD.
+#   * docbook-xsl - Provides stylesheets.
 #   * git - For cloning the Asio Git repository when it is not detected.
 #           And for uploading the output.
+#   * libboost-tools-dev - Provides boostbook (b2) and quickbook.
+#   * xsltproc - XSLT processor. Transforms XML to HTML.
 #
+# Download and install the packages.
 RUN apt-get install \
       --assume-yes \
       --no-install-recommends \
       ca-certificates \
-      doxygen \
-      git
+      docbook-xml \
+      docbook-xsl \
+      git \
+      libboost-tools-dev \
+      xsltproc
 # Clean up the cache from installations.
 RUN apt-get autoremove \
       --assume-yes \
@@ -72,7 +79,16 @@ WORKDIR /src/asio
 
 ### Custom set up for the build.
 
+# Copy the build configuration into the container.
+COPY ./root/user-config.jam /root/user-config.jam
 # Copy the build script into the container.
 COPY ./bin/build-asio-reference /bin/build-asio-reference
+# Boost.Build expects a toolset to be present.
+# But the compiler is not needed to build documentations
+#   when Boost.Build, QuickBook binaries etc are provided by Debian.
+# Copy an NOP executable file into `$PATH` for Boost.Build to find.
+COPY ./bin/g++ /bin/g++
 
+# Default command for starting a container with this image
+#   is to run the copied script.
 CMD /bin/build-asio-reference

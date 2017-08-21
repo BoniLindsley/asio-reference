@@ -1,0 +1,20 @@
+# BoostBook requires XML stylesheets and DTD.
+# The following tells BoostBook where to find them.
+using boostbook
+  : /usr/share/xml/docbook/stylesheet/docbook-xsl
+  # Note that v4.3~4.5 may also be used.
+  # (Latest is v4.5 in Debian as of time of writing: 2017-08-21.)
+  # But it seems to generate redefinition warnings.
+  # See: https://lists.boost.org/Archives/boost/2008/11/144913.php
+  : /usr/share/xml/docbook/schema/dtd/4.2
+  ;
+# Boost.Build may warn about not having a toolchain selected.
+# The toolchain is used to compile missing tools such as `quickbook`.
+# But Debian provides a `quickbook` binary, so it is not needed.
+# Adding `gcc` here removes the warninig. It will not be used.
+using gcc ;
+# Boost.Build may warn about `quickbook` path not being configurated.
+# While Boost.Build can autodetect where `quickbook` is,
+#   it will still warn about it.
+# Adding its path here removes the warning.
+using quickbook : /usr/bin/quickbook ;

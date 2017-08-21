@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# ######################################
+# Define functions for printing messages
+
 # The path to the current running script.
 script_path="$(readlink -f "$0")"
 # Used for reporting error.
@@ -21,6 +24,9 @@ error_printf_exit() {
   printf_msg "$@" 1>&2
   exit $return_value
 }
+
+# ################
+# Find Asio source
 
 # Assume the current working directory is the Asio Git repository
 #   to compile references for.
@@ -50,23 +56,39 @@ if [ ! -d .git ]; then
     || error_printf_exit  'Unable to clone Git repository for Asio.\n'
 fi
 
+# ###########################
+# Generate Asio documentation
+
 printf_msg 'Generating Asio documentation.\n'
-# The Doxygen configuration for Asio reference documentation
-#   uses relative paths for inputs.
-# So changing directory is necessary for Doxygen to find the inputs.
+# There is a hard-coded local `boostbook.dtd` path
+#   inside `index.xml` and `quickref.xml`.
+# It expected a `boost` repo to be inside the `asio` repo root dir?
+# Mitigate this by symlinking Debian `boostbook.dtd` to the same path.
+# Assume that this step was already done if the symlink target exists.
+required_boostbook_parent_path="$asio_local_repo_path/boost/tools"
+required_boostbook_path="$required_boostbook_parent_path/boostbook"
+system_boostbook_path="/usr/share/boostbook"
+if [ ! -e "$required_boostbook_path" ]; then
+  mkdir -p "$required_boostbook_parent_path" \
+    && ln -s -t "$required_boostbook_parent_path" \
+             "$system_boostbook_path" \
+    || error_printf_exit \
+         'Unable to symlink `boostbook.dtd` for boostbook to find.\n'
+fi
+# Boost.Build needs to be ran in the doc source directory.
 cd "$asio_doc_src_path" \
   || error_printf_exit 'Unable to find source directory for docs.\n'
-( cat reference.dox; printf "
-GENERATE_HTML      = YES
-HTML_OUTPUT        = html
-HAVE_DOT           = NO
-GENERATE_XML       = YES
-") | doxygen - \
-  || error_printf_exit 'Unable to build documentation.\n'
+# This will generate the documentations.
+# May take a while to run, and likely to be CPU-bound.
+b2 \
+  || error_printf_exit 'Boost.Build failed to build documentation.\n'
 
 # The commit message for the Asio reference repository will simply
 #   contain the ref and date of the corresponding Asio commit.
 commit_message="$(git show -s --format="Update to Asio ref %h %cI" HEAD)"
+
+# #############
+# Upload output
 
 # Set the remote to push to.
 printf_msg 'Uploading Asio documentation to a Git repository.\n'

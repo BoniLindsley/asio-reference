@@ -31,21 +31,6 @@ error_printf_exit() {
 # Assume the current working directory is the Asio Git repository
 #   to compile references for.
 asio_local_repo_path="$PWD"
-asio_doc_src_path="$asio_local_repo_path/asio/src/doc"
-
-# The script will ask for a remote Asio reference repository
-#   for storing the output.
-# The output files will be stored in a `doc` directory in the repo.
-# This repository will be stored locally and temporarily in a directory.
-#
-# Note that the script gives an opportunity to exit
-#   before the upload step.
-# This means that the output documentation
-#   will remain in the local Asio Git repository.
-# In particular,
-#   by using a persistent volume for the local repo in Docker,
-#   the output can be accessed.
-asio_reference_local_repo_path="$asio_doc_src_path/asio-reference"
 
 # Clone the Asio Git repo if it is not found.
 if [ ! -d .git ]; then
@@ -75,26 +60,39 @@ if [ ! -e "$required_boostbook_path" ]; then
     || error_printf_exit \
          'Unable to symlink `boostbook.dtd` for boostbook to find.\n'
 fi
+
 # Boost.Build needs to be ran in the doc source directory.
+asio_doc_src_path="$asio_local_repo_path/asio/src/doc"
 cd "$asio_doc_src_path" \
   || error_printf_exit 'Unable to find source directory for docs.\n'
 # This will generate the documentations.
 # May take a while to run, and likely to be CPU-bound.
-b2 \
-  || error_printf_exit 'Boost.Build failed to build documentation.\n'
+# b2 \
+#   || error_printf_exit 'Boost.Build failed to build documentation.\n'
 
 # The commit message for the Asio reference repository will simply
 #   contain the ref and date of the corresponding Asio commit.
 commit_message="$(git show -s --format="Update to Asio ref %h %cI" HEAD)"
 
-# #############
-# Upload output
+# #####################
+# Confirm output upload
+#
+# The script gives an opportunity here to exit before the upload step.
+# This means that the output documentation
+#   will remain in the local Asio Git repository.
+# In particular,
+#   by using a persistent volume for the local repo in Docker,
+#   the output can be accessed.
+
+# The script will ask for a remote repository for uploading the output.
+# This repository will be stored locally in the output directory.
+asio_doc_output_path="$asio_doc_src_path/html"
+#asio_reference_local_repo_path="$asio_doc_src_path/asio-reference"
+asio_reference_local_repo_path="$asio_doc_output_path"
+cd "$asio_reference_local_repo_path"
 
 # Set the remote to push to.
 printf_msg 'Uploading Asio documentation to a Git repository.\n'
-# Create the local repo if necessary.
-mkdir -p "$asio_reference_local_repo_path"
-cd "$asio_reference_local_repo_path"
 # If the directory is not a Git repo, make it into a Git repo.
 # This is a necessary step for the remote detection below.
 # If `git init` is not called,
@@ -103,30 +101,51 @@ git init \
   || error_printf_exit 'Cannot initialise Asio reference Git repo.\n'
 # Check if `origin` remote exists.
 # If not, ask for it from stdin.
-git_origin_path=$(git config remote.origin.url)
-if [ -z "$git_origin_path" ]; then
+git_origin_path="$(git config remote.origin.url)"
+set_git_remote_path() {
   printf_msg 'Choose the remote to upload to.\n'
-  printf '$ git remote add origin '
+  printf '$ git remote add  origin '
   read git_remote_path
   git remote add origin "$git_remote_path" \
     || error_printf_exit 'Unable to add Git remote.\n'
-  git_origin_path=$(git config remote.origin.url)
+  git_origin_path="$(git config remote.origin.url)"
+}
+# If remote origin exists,
+# Confirm that upload is desired before proceeding.
+if [ -n "$git_origin_path" ]; then
+  printf_msg "Remote is set as: $git_origin_path.\n"
+  printf_msg "Press <Y> to continue. Press <c-c> to stop.\n"
+  printf_msg "Enter anything else to change the remote path.\n"
+  printf '$ '
+  read read_input
+  if [ 'Y' != "$read_input" ]; then
+    printf_msg "Removing remote origin.\n"
+    git remote remove origin \
+      || error_printf_exit "Unable to remove 'origin' remote.\n"
+  fi
+  git_origin_path="$(git config remote.origin.url)"
 fi
-printf_msg "Remote is set as: $git_origin_path.\n"
-printf_msg 'Updating local repo from remote.\n'
-git pull --depth=1 origin master \
-  || error_printf_exit 'Unable to sync with remote.\n'
+if [ -z "$git_origin_path" ]; then
+  set_git_remote_path
+  printf_msg "Remote is set as: $git_origin_path.\n"
+  printf_msg "Press <Y> to continue. Press <c-c> to stop.\n"
+  printf '$ '
+  read read_input
+  if [ 'Y' != "$read_input" ]; then
+    error_printf_exit 'Unrecognised input. Aborting.\n'
+  fi
+fi
+printf_msg "Remote 'origin' is now set to:\n  $git_origin_path.\n"
 
-# Replace the `docs` directory with the `html` output.
-# This assumes the repo expects the output to be in the `doc` directory.
-printf_msg 'Replacing `docs` directory with new output.\n'
-# `-d` - Removing a directory.
-# `-f` - Suppress warning if `doc` does not exist.
-# `-r` - Remove content of `doc` directory if they exist.
-rm -dfr docs \
-  || error_printf_exit 'Unable to remove the original `docs`.\n'
-cp -r ../html docs \
-  || error_printf_exit 'Unable to write to the `docs` directory.\n'
+# #######################
+# Upload / pushing output
+
+asio_reference_branch_name='gh-pages'
+printf_msg 'Updating local repo from remote.\n'
+git pull --depth=1 origin "$asio_reference_branch_name" \
+  || error_printf_exit \
+       "Unable to sync with remote.
+Does $asio_reference_branch_name branch exist in the remote?"
 
 # Make sure Git user credential is set.
 # This is required to do a Git commit.
@@ -154,9 +173,12 @@ if [ 0 -ne $? ]; then
 fi
 
 # Add changes and do the actual commit.
-git add docs
-# Commit might return non-zero if there are no changes.
+git add --all
+# Commit might return non-zero if there are no changes
+#   when compared to a previous local commit.
+# But it might still be different from the remote.
+# So do not check the return value.
 git commit -m "$commit_message"
 # This step might ask for authentication.
-git push origin master \
+git push origin "$asio_reference_branch_name" \
   || error_printf_exit 'Push to remote failed.\n'

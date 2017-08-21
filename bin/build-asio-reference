@@ -74,6 +74,20 @@ b2 \
 #   contain the ref and date of the corresponding Asio commit.
 commit_message="$(git show -s --format="Update to Asio ref %h %cI" HEAD)"
 
+# Copy `boostbook.css` into output root `html` from Boost's repo.
+asio_doc_output_path="$asio_doc_src_path/html"
+boostbook_output_path="$asio_doc_output_path/boostbook.css"
+boostbook_css_src='http://think-async.com/Asio/asio-1.10.6/doc/boostbook.css'
+printf_msg 'Downloading boostbook.css.\n'
+curl -f -o "$boostbook_output_path" "$boostbook_css_src"
+if [ 0 -ne $? ]; then
+  printf_msg 'Unable to download boostbook.css.\n'
+  printf_msg 'It is not a necessity.\n'
+  printf_msg 'Press <Enter> to continue. Press <c-c> to stop.\n'
+  printf '$ '
+  read read_input
+fi
+
 # #####################
 # Confirm output upload
 #
@@ -86,8 +100,6 @@ commit_message="$(git show -s --format="Update to Asio ref %h %cI" HEAD)"
 
 # The script will ask for a remote repository for uploading the output.
 # This repository will be stored locally in the output directory.
-asio_doc_output_path="$asio_doc_src_path/html"
-#asio_reference_local_repo_path="$asio_doc_src_path/asio-reference"
 asio_reference_local_repo_path="$asio_doc_output_path"
 cd "$asio_reference_local_repo_path"
 
@@ -114,8 +126,8 @@ set_git_remote_path() {
 # Confirm that upload is desired before proceeding.
 if [ -n "$git_origin_path" ]; then
   printf_msg "Remote is set as: $git_origin_path.\n"
-  printf_msg "Press <Y> to continue. Press <c-c> to stop.\n"
-  printf_msg "Enter anything else to change the remote path.\n"
+  printf_msg 'Press <Y> to continue. Press <c-c> to stop.\n'
+  printf_msg 'Enter anything else to change the remote path.\n'
   printf '$ '
   read read_input
   if [ 'Y' != "$read_input" ]; then

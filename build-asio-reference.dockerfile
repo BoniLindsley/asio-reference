@@ -46,6 +46,7 @@ RUN apt-get update
 # The following packages are required.
 #
 #   * ca-certificates - for cloning Asio Git repository via https.
+#   * curl - For downloading `boostbook.css` not included in Asio src.
 #   * docbook-xml - Provides DocBook DTD.
 #   * docbook-xsl - Provides stylesheets.
 #   * git - For cloning the Asio Git repository when it is not detected.
@@ -58,6 +59,7 @@ RUN apt-get install \
       --assume-yes \
       --no-install-recommends \
       ca-certificates \
+      curl \
       docbook-xml \
       docbook-xsl \
       git \

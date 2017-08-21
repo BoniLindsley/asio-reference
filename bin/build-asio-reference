@@ -67,8 +67,8 @@ cd "$asio_doc_src_path" \
   || error_printf_exit 'Unable to find source directory for docs.\n'
 # This will generate the documentations.
 # May take a while to run, and likely to be CPU-bound.
-# b2 \
-#   || error_printf_exit 'Boost.Build failed to build documentation.\n'
+b2 \
+  || error_printf_exit 'Boost.Build failed to build documentation.\n'
 
 # The commit message for the Asio reference repository will simply
 #   contain the ref and date of the corresponding Asio commit.
@@ -142,24 +142,24 @@ printf_msg "Remote 'origin' is now set to:\n  $git_origin_path.\n"
 
 asio_reference_branch_name='gh-pages'
 printf_msg 'Updating local repo from remote.\n'
-git pull --depth=1 origin "$asio_reference_branch_name" \
-  || error_printf_exit \
-       "Unable to sync with remote.
-Does $asio_reference_branch_name branch exist in the remote?"
+git fetch --depth=1 origin "$asio_reference_branch_name"
+
+# If it fails to fetch, the branch may not exist.
+# Confirm before trying to push.
+if [ 0 -ne $? ]; then
+  printf_msg 'Unable to sync with remote.\n'
+  printf_msg "Does remote '$asio_reference_branch_name' branch exist?\n"
+  printf_msg "Press <Y> to try pushing anyway. Press <c-c> to stop.\n"
+  printf '$ '
+  read read_input
+  if [ 'Y' != "$read_input" ]; then
+    error_printf_exit 'Unrecognised input. Aborting.\n'
+  fi
+  git checkout -b "$asio_reference_branch_name"
+fi
 
 # Make sure Git user credential is set.
 # This is required to do a Git commit.
-git config user.email > /dev/null
-if [ 0 -ne $? ]; then
-  printf_msg 'Git user email is not set.\n'
-  if [ "$__quiet" = true ]; then
-    return 1
-  fi
-  printf '$ git config user.email '
-  read git_email
-  git config user.email "$git_email" \
-    || error_printf_exit 'Unable to set Git user email.\n'
-fi
 git config user.name > /dev/null
 if [ 0 -ne $? ]; then
   printf_msg 'Git user name is not set.\n'
@@ -170,6 +170,17 @@ if [ 0 -ne $? ]; then
   read git_username
   git config user.name "$git_username" \
     || error_printf_exit 'Unable to set Git user name.\n'
+fi
+git config user.email > /dev/null
+if [ 0 -ne $? ]; then
+  printf_msg 'Git user email is not set.\n'
+  if [ "$__quiet" = true ]; then
+    return 1
+  fi
+  printf '$ git config user.email '
+  read git_email
+  git config user.email "$git_email" \
+    || error_printf_exit 'Unable to set Git user email.\n'
 fi
 
 # Add changes and do the actual commit.

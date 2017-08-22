@@ -31,62 +31,73 @@ error_printf_exit() {
 # Assume the current working directory is the Asio Git repository
 #   to compile references for.
 asio_local_repo_path="$PWD"
+asio_remote_repo_path='https://github.com/chriskohlhoff/asio'
 
 # Clone the Asio Git repo if it is not found.
 if [ ! -d .git ]; then
-  printf_msg 'Clone the Asio Git repo.\n'
+  printf_msg 'Cloning the Asio Git repo.\n'
   git init \
-    && git remote add origin 'https://github.com/chriskohlhoff/asio' \
+    && git remote add origin "$asio_remote_repo_path" \
     && git pull --depth=1 origin master \
-    || error_printf_exit  'Unable to clone Git repository for Asio.\n'
+    || error_printf_exit  'Failed to clone Asio source:\n  %s\n' \
+                          "$asio_remote_repo_path"
 fi
+
+# The commit message for the Asio reference repository will simply
+#   contain the ref and date of the corresponding Asio commit.
+commit_message="$(git show -s --format="Update to Asio ref %h %cI" HEAD)"
+
+# #################
+# Find Boost source
+
+# Asio build scripts expect Boost src to be inside Asio repo root.
+boost_local_repo_path="$asio_local_repo_path/boost"
+boost_remote_repo_path='https://github.com/boostorg/boost'
+
+# Clone the Boost Git repo if it is not found.
+mkdir -p "$boost_local_repo_path"
+cd "$boost_local_repo_path"
+if [ ! -d .git ]; then
+  printf_msg 'Cloning the Boost Git repo.\n'
+  git init \
+    && git remote add origin "$boost_remote_repo_path" \
+    && git pull --depth=1 origin master \
+    || error_printf_exit  'Failed to clone Boost source:\n  %s\n' \
+                          "$boost_remote_repo_path"
+fi
+
+# Boost repo uses submodules for its libraries.
+# Only one of the submodules is needed for compiling references.
+git submodule init tools/boostbook \
+  || error_printf_exit 'Failed to initialise BoostBook Git submodule.\n'
+git submodule update --depth=1 \
+  || error_printf_exit 'Failed to update BoostBook Git submodule\n'
 
 # ###########################
 # Generate Asio documentation
 
-printf_msg 'Generating Asio documentation.\n'
-# There is a hard-coded local `boostbook.dtd` path
-#   inside `index.xml` and `quickref.xml`.
-# It expected a `boost` repo to be inside the `asio` repo root dir?
-# Mitigate this by symlinking Debian `boostbook.dtd` to the same path.
-# Assume that this step was already done if the symlink target exists.
-required_boostbook_parent_path="$asio_local_repo_path/boost/tools"
-required_boostbook_path="$required_boostbook_parent_path/boostbook"
-system_boostbook_path="/usr/share/boostbook"
-if [ ! -e "$required_boostbook_path" ]; then
-  mkdir -p "$required_boostbook_parent_path" \
-    && ln -s -t "$required_boostbook_parent_path" \
-             "$system_boostbook_path" \
-    || error_printf_exit \
-         'Unable to symlink `boostbook.dtd` for boostbook to find.\n'
-fi
-
+printf_msg 'Generating Asio documentations.\n'
 # Boost.Build needs to be ran in the doc source directory.
 asio_doc_src_path="$asio_local_repo_path/asio/src/doc"
+asio_doc_output_path="$asio_doc_src_path/html"
 cd "$asio_doc_src_path" \
   || error_printf_exit 'Unable to find source directory for docs.\n'
 # This will generate the documentations.
 # May take a while to run, and likely to be CPU-bound.
 b2 \
   || error_printf_exit 'Boost.Build failed to build documentation.\n'
-
-# The commit message for the Asio reference repository will simply
-#   contain the ref and date of the corresponding Asio commit.
-commit_message="$(git show -s --format="Update to Asio ref %h %cI" HEAD)"
-
-# Copy `boostbook.css` into output root `html` from Boost's repo.
-asio_doc_output_path="$asio_doc_src_path/html"
-boostbook_output_path="$asio_doc_output_path/boostbook.css"
-boostbook_css_src='http://think-async.com/Asio/asio-1.10.6/doc/boostbook.css'
-printf_msg 'Downloading boostbook.css.\n'
-curl -f -o "$boostbook_output_path" "$boostbook_css_src"
-if [ 0 -ne $? ]; then
-  printf_msg 'Unable to download boostbook.css.\n'
-  printf_msg 'It is not a necessity.\n'
-  printf_msg 'Press <Enter> to continue. Press <c-c> to stop.\n'
-  printf '$ '
-  read read_input
-fi
+# GitHub pages expects an `index.html` output.
+# Check that it is created.
+test -e "$asio_doc_output_path/index.html" \
+  || error_printf_exit 'Unable to find index.html from generated docs.\n'
+# Required graphics from the Boost repo do not seem to be copied over.
+printf_msg 'Copying resource files from Boost repo.\n'
+cp "$boost_local_repo_path/doc/src/images/home.png" \
+   "$boost_local_repo_path/doc/src/images/next.png" \
+   "$boost_local_repo_path/doc/src/images/note.png" \
+   "$boost_local_repo_path/doc/src/images/prev.png" \
+   "$boost_local_repo_path/doc/src/images/up.png" \
+   "$asio_doc_output_path"    # Copy destination.
 
 # #####################
 # Confirm output upload
@@ -114,33 +125,35 @@ git init \
 # Check if `origin` remote exists.
 # If not, ask for it from stdin.
 git_origin_path="$(git config remote.origin.url)"
-set_git_remote_path() {
+# If remote origin exists,
+# Confirm that upload is desired before proceeding.
+if [ -n "$git_origin_path" ]; then
+  printf_msg 'Push to the following Git repo?\n  %s\n' "$git_origin_path"
+  printf_msg 'Press <Y> to confirm.\n'
+  printf_msg 'Press <N> to change the remote.\n'
+  printf_msg 'Press <c-c> to abort.\n'
+  printf '$ '
+  read read_input
+  if [ 'N' = "$read_input" ]; then
+    printf_msg "Removing remote origin.\n"
+    git remote remove origin \
+      || error_printf_exit "Unable to remove 'origin' remote.\n"
+    git_origin_path="$(git config remote.origin.url)"
+  fi
+  if [ 'Y' != "$read_input" ]; then
+    error_printf_exit 'Unrecognised input. Aborting.\n'
+  fi
+fi
+if [ -z "$git_origin_path" ]; then
   printf_msg 'Choose the remote to upload to.\n'
-  printf '$ git remote add  origin '
+  printf '$ git remote add origin '
   read git_remote_path
   git remote add origin "$git_remote_path" \
     || error_printf_exit 'Unable to add Git remote.\n'
   git_origin_path="$(git config remote.origin.url)"
-}
-# If remote origin exists,
-# Confirm that upload is desired before proceeding.
-if [ -n "$git_origin_path" ]; then
-  printf_msg "Remote is set as: $git_origin_path.\n"
-  printf_msg 'Press <Y> to continue. Press <c-c> to stop.\n'
-  printf_msg 'Enter anything else to change the remote path.\n'
-  printf '$ '
-  read read_input
-  if [ 'Y' != "$read_input" ]; then
-    printf_msg "Removing remote origin.\n"
-    git remote remove origin \
-      || error_printf_exit "Unable to remove 'origin' remote.\n"
-  fi
-  git_origin_path="$(git config remote.origin.url)"
-fi
-if [ -z "$git_origin_path" ]; then
-  set_git_remote_path
-  printf_msg "Remote is set as: $git_origin_path.\n"
-  printf_msg "Press <Y> to continue. Press <c-c> to stop.\n"
+
+  printf_msg 'Remote is set as:\n  %s\n' "$git_origin_path"
+  printf_msg "Press <Y> to confirm. Press <c-c> to abort.\n"
   printf '$ '
   read read_input
   if [ 'Y' != "$read_input" ]; then
@@ -161,13 +174,16 @@ git fetch --depth=1 origin "$asio_reference_branch_name"
 if [ 0 -ne $? ]; then
   printf_msg 'Unable to sync with remote.\n'
   printf_msg "Does remote '$asio_reference_branch_name' branch exist?\n"
-  printf_msg "Press <Y> to try pushing anyway. Press <c-c> to stop.\n"
+  printf_msg "Press <Y> to try pushing anyway. Press <c-c> to abort.\n"
   printf '$ '
   read read_input
   if [ 'Y' != "$read_input" ]; then
     error_printf_exit 'Unrecognised input. Aborting.\n'
   fi
   git checkout -b "$asio_reference_branch_name"
+else
+  git reset --soft "origin/$asio_reference_branch_name" \
+    || error_printf_exit 'Unable to switch to branch gh-pages.\n'
 fi
 
 # Make sure Git user credential is set.
@@ -203,5 +219,5 @@ git add --all
 # So do not check the return value.
 git commit -m "$commit_message"
 # This step might ask for authentication.
-git push origin "$asio_reference_branch_name" \
+git push origin "HEAD:$asio_reference_branch_name" \
   || error_printf_exit 'Push to remote failed.\n'
